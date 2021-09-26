@@ -1,7 +1,6 @@
 package service
 
 import (
-	"fmt"
 	"log"
 	"strings"
 
@@ -81,50 +80,71 @@ func CheckTCP(msg *proto.Msg) bool {
 	return proto.NetworkType_value[strings.ToUpper(msg.Network)] == int32(proto.NetworkType_TCP)
 }
 
-// WriteFunc ...
-func WriteFunc(c *Conn) error {
-	for msg := range WritingMsgChannel {
-		body, err := msg.XXX_Marshal(nil, false)
-		if err != nil {
-			log.Println("msg打包失败", err)
-			return err
+// _DefaultWriteFunc ...
+func _DefaultWriteFunc(logPrefix string, c *Conn) func(*Conn, chan struct{}) error {
+	return func(c *Conn, closeC chan struct{}) error {
+		for {
+			msg := new(proto.Msg)
+			select {
+			case msg = <-WritingMsgChannel:
+				if msg == nil {
+					return nil
+				}
+			case <-closeC:
+				return nil
+			}
+
+			body, err := msg.XXX_Marshal(nil, false)
+			if err != nil {
+				log.Println(logPrefix, "msg编码失败", err)
+				return err
+			}
+
+			rbody, err := pack.NewPackage(body).PackBytes()
+			if err != nil {
+				log.Println(logPrefix, "mag打包失败", err)
+				return err
+			}
+
+			// log.Println("service", "写入消息", len(msg.Body))
+
+			wn, err := c.Write(rbody)
+			if err != nil {
+				log.Println(logPrefix, "写入消息失败", err)
+				return err
+			}
+
+			if wn != len(rbody) {
+				log.Println(logPrefix, "写入消息未成功", err)
+				return err
+			}
 		}
-		// log.Println("service", "开始回写", len(body), string(body))
-
-		body, err = pack.NewPackage(body).PackBytes()
-		if err != nil {
-			log.Println("pack打包失败", err)
-			return err
-		}
-
-		log.Println("service", "开始回写", len(msg.Body), string(msg.Body))
-
-		fmt.Println(c.Write(body))
 	}
-	return nil
 }
 
-// ReadFunc ...
-func ReadFunc(c *Conn) error {
-	scanner := pack.NewScanner(c)
-	for scanner.Scan() {
-		scannedPack := new(pack.Package)
-		err := scannedPack.UnpackBytes(scanner.Bytes())
-		if err != nil {
-			log.Println("解包pack失败", err, scanner.Bytes())
-			return err
+// _DefaultReadFunc ...
+func _DefaultReadFunc(logPrefix string, c *Conn) func(*Conn, chan struct{}) error {
+	return func(c *Conn, closeC chan struct{}) error {
+		scanner := pack.NewScanner(c)
+		for scanner.Scan() {
+			scannedPack := new(pack.Package)
+			err := scannedPack.UnpackBytes(scanner.Bytes())
+			if err != nil {
+				log.Println(logPrefix, "msg解包失败", err, string(scanner.Bytes()))
+				return err
+			}
+
+			msg := new(proto.Msg)
+			err = msg.XXX_Unmarshal(scannedPack.Msg)
+			if err != nil {
+				log.Println(logPrefix, "msg解码失败", err, string(scannedPack.Msg))
+				return err
+			}
+
+			log.Println(logPrefix, "读取消息", len(msg.Body))
+
+			ReadingMsgChannel <- msg
 		}
-
-		msg := new(proto.Msg)
-		err = msg.XXX_Unmarshal(scannedPack.Msg)
-		if err != nil {
-			log.Println("解包msg失败", err, scanner.Bytes())
-			return err
-		}
-
-		log.Println("service", "开始读取", len(msg.Body), string(msg.Body))
-
-		ReadingMsgChannel <- msg
+		return nil
 	}
-	return nil
 }

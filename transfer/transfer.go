@@ -55,9 +55,8 @@ func NewTransfer(localAddr, remoteAddr proto.Addr, network proto.NetworkType) Tr
 	switch network {
 	case proto.NetworkType_HTTP:
 		trans = newHTTP(index, localAddr, remoteAddr)
-		// return &HTTP{MsgID: index, receive: make(chan []byte), localAddr: localAddr, RemoteAddr: remoteAddr}
 	case proto.NetworkType_TCP:
-		// return &TCP{MsgID: index, localAddr: localAddr, RemoteAddr: remoteAddr}
+		trans = newTCP(index, localAddr, remoteAddr)
 	default:
 		trans = newHTTP(index, localAddr, remoteAddr)
 	}
@@ -74,9 +73,8 @@ func NewTransferWithIPPort(localIP string, localPort int, remoteIP string, remot
 	switch network {
 	case proto.NetworkType_HTTP:
 		trans = newHTTP(index, *localAddr, *remoteAddr)
-		// return &HTTP{MsgID: index, receive: make(chan []byte), localAddr: localAddr, RemoteAddr: remoteAddr}
 	case proto.NetworkType_TCP:
-		// return &TCP{MsgID: index, localAddr: localAddr, RemoteAddr: remoteAddr}
+		trans = newTCP(index, *localAddr, *remoteAddr)
 	default:
 		trans = newHTTP(index, *localAddr, *remoteAddr)
 	}

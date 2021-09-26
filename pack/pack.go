@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"time"
 )
@@ -53,23 +52,12 @@ func (p *Package) Unpack(reader io.Reader) error {
 
 // SplitFunc split
 func SplitFunc(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	fmt.Printf("%t|%d|%s\n", atEOF, len(data), data)
-	if len(data) > 2 {
-		fmt.Println(atEOF, string(data[0]), string(data[1]))
-	}
-	// for i, v := range data {
-	// 	fmt.Printf("%d|%c, ", i, v)
-	// }
+	// log.Printf("%t|%d|%s\n", atEOF, len(data), data)
 	if !atEOF && data[0] == 'X' && data[1] == '1' {
 		if len(data) > 10 {
-			// fmt.Println("开始解析")
 			length := int64(0)
 			binary.Read(bytes.NewReader(data[2:10]), binary.BigEndian, &length)
-
-			// fmt.Println("解析长度为", length, len(data))
-
 			if int(length) <= len(data) {
-				// fmt.Println("开始解析-2")
 				return int(length), data[:int(length)], nil
 			}
 		}

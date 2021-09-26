@@ -1,14 +1,15 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"sync"
 
-	"github.com/ranxx/goproxy/pack"
 	"github.com/ranxx/goproxy/proto"
 )
 
@@ -16,11 +17,27 @@ import (
 type Client struct {
 	IP   string
 	Port int
+
+	Conn     *Conn
+	mutex    sync.Mutex
+	tcpConns [][]net.Conn
 }
 
 // NewClient ...
 func NewClient(ip string, port int) *Client {
-	return &Client{IP: ip, Port: port}
+	return &Client{IP: ip, Port: port, tcpConns: make([][]net.Conn, 1024*4)}
+}
+
+// Close ...
+func (c *Client) Close() {
+	c.Conn.close()
+	for _, conns := range c.tcpConns {
+		for _, conn := range conns {
+			conn.Close()
+		}
+	}
+	close(ReadingMsgChannel)
+	close(WritingMsgChannel)
 }
 
 // Start ...
@@ -29,62 +46,21 @@ func (c *Client) Start() {
 	if err != nil {
 		panic(err)
 	}
+
 	log.Printf("client 已连上server %s:%d\n", c.IP, c.Port)
-	go c.Customer()
-	c.StartConn(conn)
+
+	c.Conn = NewConn("client", conn)
+	c.StartConn()
+
+	c.Customer()
 }
 
 // StartConn ...
-func (c *Client) StartConn(conn net.Conn) {
-	// ReadFunc ...
-	_ReadFunc := func(c *Conn) error {
-		scanner := pack.NewScanner(c.Conn)
-		for scanner.Scan() {
-			scannedPack := new(pack.Package)
-			err := scannedPack.UnpackBytes(scanner.Bytes())
-			if err != nil {
-				log.Println("解包pack失败", err, scanner.Bytes())
-				return err
-			}
-
-			msg := new(proto.Msg)
-			err = msg.XXX_Unmarshal(scannedPack.Msg)
-			if err != nil {
-				log.Println("解包msg失败", err, scanner.Bytes())
-				return err
-			}
-
-			log.Println("client", "开始读取", len(msg.Body), string(msg.Body))
-			ReadingMsgChannel <- msg
-		}
-		return nil
-	}
-
-	// WriteFunc ...
-	_WriteFunc := func(c *Conn) error {
-		for msg := range WritingMsgChannel {
-			body, err := msg.XXX_Marshal(nil, false)
-			if err != nil {
-				log.Println("msg打包失败", err)
-				return err
-			}
-			body, err = pack.NewPackage(body).PackBytes()
-			if err != nil {
-				log.Println("pack打包失败", err)
-				return err
-			}
-
-			log.Println("client", "开始回写", len(msg.Body), string(msg.Body))
-			c.Write(body)
-		}
-		return nil
-	}
-
+func (c *Client) StartConn() {
 	// 开启读写
-	cconn := NewConn(conn)
-	cconn.WriteFunc = _WriteFunc
-	cconn.ReadFunc = _ReadFunc
-	cconn.Start()
+	c.Conn.WithReadFunc(_DefaultReadFunc("client", c.Conn)).
+		WithWriteFunc(_DefaultWriteFunc("client", c.Conn)).Start()
+	return
 }
 
 // Customer ...
@@ -92,6 +68,10 @@ func (c *Client) Customer() {
 	for v := range ReadingMsgChannel {
 		// log.Println("client", "读取到service的消息", string(v.Body))
 		// http,转发请求
+		if v == nil {
+			return
+		}
+
 		if CheckHTTP(v) {
 			go c.HTTPHandler(v)
 			continue
@@ -118,6 +98,7 @@ func (c *Client) HTTPHandler(msg *proto.Msg) {
 		log.Println("client", "处理http 转发http失败", err)
 		panic(err)
 	}
+	request.Close = true
 	defer request.Body.Close()
 
 	for _, header := range body.Header {
@@ -126,18 +107,19 @@ func (c *Client) HTTPHandler(msg *proto.Msg) {
 		}
 	}
 
-	response, err := new(http.Client).Do(request)
+	cli := &http.Client{Transport: &http.Transport{DisableKeepAlives: true, MaxIdleConns: 0, MaxIdleConnsPerHost: 0}}
+	response, err := cli.Do(request)
 	if err != nil {
 		log.Println("client", "处理http 请求http失败", err)
 		panic(err)
 	}
-	defer response.Body.Close()
 
 	bbody, err := io.ReadAll(response.Body)
 	if err != nil {
 		log.Println("client", "处理http 读取http返回值失败", err)
 		panic(err)
 	}
+	response.Body.Close()
 
 	body.Body = bbody
 	body.Header = make([]*proto.Header, 0, len(response.Proto))
@@ -163,5 +145,58 @@ func (c *Client) HTTPHandler(msg *proto.Msg) {
 // TCPHandler ...
 // 主动连接
 func (c *Client) TCPHandler(msg *proto.Msg) {
-	// 新
+	// 先解析
+	body := new(proto.TCPBody)
+	if err := body.XXX_Unmarshal(msg.Body); err != nil {
+		log.Println("client.tcp", "解析body失败", err)
+		panic(err)
+	}
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if body.MsgId >= int64(len(c.tcpConns[msg.MsgId])) {
+		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", body.Laddr.Ip, body.Laddr.Port))
+		if err != nil {
+			log.Println("client.tcp", fmt.Sprintf("连接 %s:%d 失败", body.Laddr.Ip, body.Laddr.Port), err)
+			panic(err)
+		}
+		c.tcpConns[msg.MsgId] = append(c.tcpConns[msg.MsgId], conn)
+		c.tcpConns[msg.MsgId][body.MsgId] = conn
+
+		scanner := bufio.NewScanner(conn)
+		scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
+			log.Println("servcie.client.tcp", atEOF, len(data))
+			if atEOF && len(data) == 0 {
+				return 0, nil, nil
+			}
+			if !atEOF {
+				return len(data), data[:], nil
+			}
+			return 0, nil, nil
+		})
+		go func() {
+			for scanner.Scan() {
+				// 开启读
+				rbody := scanner.Bytes()
+
+				body.Body = rbody
+				body.Laddr, body.Raddr = body.Raddr, body.Laddr
+
+				tcpBody, err := body.XXX_Marshal(nil, false)
+				if err != nil {
+					log.Println("client.tcp", "编码body失败", err)
+					panic(err)
+				}
+				WritingMsgChannel <- &proto.Msg{
+					Network: proto.NetworkType_TCP.String(),
+					MsgId:   msg.MsgId,
+					Body:    tcpBody,
+				}
+			}
+		}()
+	}
+
+	// 开启连接写
+	c.tcpConns[msg.MsgId][body.MsgId].Write(body.Body)
 }

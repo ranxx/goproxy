@@ -39,10 +39,8 @@ func (s *Service) Start() {
 
 // StartConn ...
 func (s *Service) StartConn(conn net.Conn) {
-	// TODO: 读取数据，并设置超时，判断是否为client
 	// 读取数据
-	cconn := NewConn(conn)
-	cconn.WriteFunc = WriteFunc
-	cconn.ReadFunc = ReadFunc
-	cconn.Start()
+	cconn := NewConn("service", conn)
+	cconn.WithReadFunc(_DefaultReadFunc("service", cconn)).
+		WithWriteFunc(_DefaultWriteFunc("service", cconn)).Start()
 }

@@ -18,6 +18,12 @@ func main() {
 
 	go transfer.NewTransferWithIPPort("", 3336, "", 3333, proto.NetworkType_HTTP).Start()
 
+	go transfer.NewTransferWithIPPort("", 2022, "", 22, proto.NetworkType_TCP).Start()
+
+	go transfer.NewTransferWithIPPort("", 3022, "", 22, proto.NetworkType_TCP).Start()
+
+	go transfer.NewTransferWithIPPort("", 4022, "", 22, proto.NetworkType_TCP).Start()
+
 	srv := service.NewService("", 12341)
 	srv.Start()
 }

@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 
 	"github.com/ranxx/goproxy/proto"
 	"github.com/ranxx/goproxy/service"
@@ -19,6 +20,7 @@ type HTTP struct {
 	Indexs                []*httpBody
 	ReceiveBody           chan *proto.HTTPBody
 	LocalAddr, RemoteAddr proto.Addr
+	mutex                 sync.Mutex
 }
 
 type httpBody struct {
@@ -30,7 +32,7 @@ type httpBody struct {
 func newHTTP(msgID int64, localAddr, remoteAddr proto.Addr) Transfer {
 	return &HTTP{
 		MsgID:       msgID,
-		Indexs:      make([]*httpBody, 0, 1024*8),
+		Indexs:      make([]*httpBody, 512),
 		ReceiveBody: make(chan *proto.HTTPBody, 1024*8),
 		LocalAddr:   localAddr,
 		RemoteAddr:  remoteAddr,
@@ -40,13 +42,15 @@ func newHTTP(msgID int64, localAddr, remoteAddr proto.Addr) Transfer {
 
 // Receive ...
 func (h *HTTP) Receive(body []byte) {
-	httpBody := new(proto.HTTPBody)
-	if err := httpBody.XXX_Unmarshal(body); err != nil {
-		log.Println("transfer.http", "解码返回的消息失败", err)
-		panic(err)
-	}
-	log.Println("transfer.http", fmt.Sprintf("msgID:%d 收到 %d 返回的数据", h.MsgID, httpBody.MsgId))
-	h.Indexs[httpBody.MsgId].receiveBody <- httpBody
+	go func() {
+		httpBody := new(proto.HTTPBody)
+		if err := httpBody.XXX_Unmarshal(body); err != nil {
+			log.Println("transfer.http", "解码返回的消息失败", err)
+			panic(err)
+		}
+		log.Println("transfer.http", fmt.Sprintf("msgID:%d 收到 %d 返回的数据", h.MsgID, httpBody.MsgId))
+		h.Indexs[httpBody.MsgId].receiveBody <- httpBody
+	}()
 }
 
 // Start ...
@@ -64,7 +68,10 @@ func (h *HTTP) send(body *proto.HTTPBody) *httpBody {
 
 	hbody := &httpBody{HTTPBody: body, receiveBody: make(chan *proto.HTTPBody, 1)}
 
-	h.Indexs = append(h.Indexs, hbody)
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+
+	h.Indexs = append(h.Indexs, nil)
 	h.Indexs[body.MsgId] = hbody
 
 	service.WritingMsgChannel <- &proto.Msg{
@@ -89,6 +96,8 @@ func (h *HTTP) newProtoHTTPBody(index int64, url, method string, header http.Hea
 	for key, values := range header {
 		httpBody.Header = append(httpBody.Header, &proto.Header{Key: key, Value: values})
 	}
+	httpBody.Header = append(httpBody.Header, &proto.Header{Key: "Connection", Value: []string{"close"}})
+
 	return &httpBody
 }
 
