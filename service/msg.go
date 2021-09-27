@@ -17,6 +17,14 @@ var (
 	WritingMsgChannel = make(chan *proto.Msg, 1024)
 )
 
+// Init ...
+func Init() {
+	close(ReadingMsgChannel)
+	close(WritingMsgChannel)
+	ReadingMsgChannel = make(chan *proto.Msg, 1024)
+	WritingMsgChannel = make(chan *proto.Msg, 1024)
+}
+
 // // Msg ...
 // type Msg struct {
 // 	Network string      `json:"network"`

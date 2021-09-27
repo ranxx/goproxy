@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"sync"
@@ -14,6 +15,8 @@ type Conn struct {
 	logPrefix string
 
 	closeC chan struct{}
+
+	closeB bool
 
 	once sync.Once
 
@@ -29,9 +32,6 @@ func NewConn(logPrefix string, conn net.Conn) *Conn {
 
 // Start ...
 func (conn *Conn) Start() *Conn {
-	// 怎么规定 数据读写
-	// 数据读
-
 	// 开启关闭
 	go conn.closing()
 
@@ -64,10 +64,16 @@ func (conn *Conn) close() {
 	)
 }
 
+func (conn *Conn) closed() bool {
+	return conn.closeB
+}
+
 func (conn *Conn) closing() {
 	<-conn.closeC
+	conn.closeB = true
 	conn.Conn.Close()
-	log.Println(conn.logPrefix, "断开连接", conn.RemoteAddr())
+	log.Println(conn.logPrefix, fmt.Sprintf("断开连接 %s -> %s", conn.LocalAddr(), conn.RemoteAddr()))
+	return
 }
 
 // reading 读
@@ -96,5 +102,6 @@ func (conn *Conn) writing() {
 			continue
 		}
 		conn.writeFunc(conn, conn.closeC)
+		break
 	}
 }

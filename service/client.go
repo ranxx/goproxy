@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/ranxx/goproxy/proto"
 )
@@ -20,6 +21,7 @@ type Client struct {
 
 	Conn     *Conn
 	mutex    sync.Mutex
+	once     sync.Once
 	tcpConns [][]net.Conn
 }
 
@@ -28,31 +30,66 @@ func NewClient(ip string, port int) *Client {
 	return &Client{IP: ip, Port: port, tcpConns: make([][]net.Conn, 1024*4)}
 }
 
+func (c *Client) reset() {
+	c.Conn = nil
+	c.once = sync.Once{}
+	c.tcpConns = make([][]net.Conn, 1024*4)
+	ReadingMsgChannel = make(chan *proto.Msg, 1024)
+	WritingMsgChannel = make(chan *proto.Msg, 1024)
+}
+
 // Close ...
 func (c *Client) Close() {
-	c.Conn.close()
-	for _, conns := range c.tcpConns {
-		for _, conn := range conns {
-			conn.Close()
+	c.once.Do(func() {
+		if c.Conn != nil {
+			c.Conn.close()
+			c.Conn = nil
 		}
-	}
-	close(ReadingMsgChannel)
-	close(WritingMsgChannel)
+		for _, conns := range c.tcpConns {
+			for _, conn := range conns {
+				conn.Close()
+			}
+		}
+		close(ReadingMsgChannel)
+		close(WritingMsgChannel)
+	})
+}
+
+func (c *Client) dail() (net.Conn, error) {
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", c.IP, c.Port), time.Second*10)
+	return conn, err
 }
 
 // Start ...
 func (c *Client) Start() {
-	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", c.IP, c.Port))
-	if err != nil {
-		panic(err)
+	for {
+		if c.Conn != nil && !c.Conn.closed() {
+			time.Sleep(time.Second * 2)
+			continue
+		}
+
+		c.Close()
+
+		// 重连
+		conn, err := c.dail()
+		if err != nil {
+			log.Println("client", err)
+			time.Sleep(time.Second * 3)
+			continue
+		}
+
+		// 连上server
+		log.Println("client", fmt.Sprintf("连上server %s -> %s", conn.LocalAddr(), conn.RemoteAddr()))
+
+		// 重置
+		c.reset()
+
+		// 重新初始化 Conn
+		c.Conn = NewConn("client", conn)
+		c.StartConn()
+
+		go c.Customer()
 	}
-
-	log.Printf("client 已连上server %s:%d\n", c.IP, c.Port)
-
-	c.Conn = NewConn("client", conn)
-	c.StartConn()
-
-	c.Customer()
 }
 
 // StartConn ...
@@ -65,13 +102,11 @@ func (c *Client) StartConn() {
 
 // Customer ...
 func (c *Client) Customer() {
+	log.Println("client", "开始消费")
 	for v := range ReadingMsgChannel {
-		// log.Println("client", "读取到service的消息", string(v.Body))
-		// http,转发请求
 		if v == nil {
-			return
+			break
 		}
-
 		if CheckHTTP(v) {
 			go c.HTTPHandler(v)
 			continue
@@ -79,6 +114,7 @@ func (c *Client) Customer() {
 		// tcp，主动连接
 		go c.TCPHandler(v)
 	}
+	log.Println("client", "退出消费")
 }
 
 // HTTPHandler ...
@@ -161,6 +197,8 @@ func (c *Client) TCPHandler(msg *proto.Msg) {
 			log.Println("client.tcp", fmt.Sprintf("连接 %s:%d 失败", body.Laddr.Ip, body.Laddr.Port), err)
 			panic(err)
 		}
+		log.Println("client", fmt.Sprintf("新建tcp %s -> %s", conn.LocalAddr(), conn.RemoteAddr()))
+
 		c.tcpConns[msg.MsgId] = append(c.tcpConns[msg.MsgId], conn)
 		c.tcpConns[msg.MsgId][body.MsgId] = conn
 
@@ -194,6 +232,7 @@ func (c *Client) TCPHandler(msg *proto.Msg) {
 					Body:    tcpBody,
 				}
 			}
+			log.Println("client", fmt.Sprintf("关闭tcp %s -> %s", conn.LocalAddr(), conn.RemoteAddr()))
 		}()
 	}
 

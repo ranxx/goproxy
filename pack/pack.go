@@ -54,6 +54,7 @@ func (p *Package) Unpack(reader io.Reader) error {
 func SplitFunc(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	// log.Printf("%t|%d|%s\n", atEOF, len(data), data)
 	if !atEOF && data[0] == 'X' && data[1] == '1' {
+		// Version + length = 2 + 8 = 10 byte
 		if len(data) > 10 {
 			length := int64(0)
 			binary.Read(bytes.NewReader(data[2:10]), binary.BigEndian, &length)

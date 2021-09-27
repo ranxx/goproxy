@@ -6,6 +6,9 @@ import (
 	"net"
 )
 
+// DefaultPort ...
+var DefaultPort int = 12341
+
 // Service 隧道服务
 type Service struct {
 	IP   string

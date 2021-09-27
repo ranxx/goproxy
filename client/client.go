@@ -1,7 +1,8 @@
 package main
 
 import (
-	"fmt"
+	"flag"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -9,10 +10,18 @@ import (
 	"github.com/ranxx/goproxy/service"
 )
 
-func main() {
-	fmt.Println("Hello World")
+// ip port
+var ip string
+var port int
 
-	srv := service.NewClient("", 12341)
+func init() {
+	flag.StringVar(&ip, "ip", "", "remote ip")
+	flag.IntVar(&port, "port", service.DefaultPort, "remote port")
+	flag.Parse()
+}
+
+func main() {
+	srv := service.NewClient(ip, port)
 	go srv.Start()
 
 	ch := make(chan os.Signal, 1)
@@ -22,7 +31,7 @@ func main() {
 		switch si {
 		case syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL:
 			srv.Close()
-			fmt.Println("client退出")
+			log.Println("client退出")
 			return
 		case syscall.SIGHUP:
 		default:
