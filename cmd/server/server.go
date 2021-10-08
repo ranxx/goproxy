@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/ranxx/goproxy/proto"
 	"github.com/ranxx/goproxy/service"
-	"github.com/ranxx/goproxy/transfer"
+	transfer "github.com/ranxx/goproxy/transfer/service"
+	"github.com/ranxx/goproxy/utils"
 )
 
 func main() {
@@ -24,6 +26,14 @@ func main() {
 
 	go transfer.NewTransferWithIPPort("", 4022, "", 22, proto.NetworkType_TCP).Start()
 
+	go transfer.NewTransferWithIPPort("", 5555, "", 4444, proto.NetworkType_TCP).Start()
+
 	srv := service.NewService("", 12341)
-	srv.Start()
+	go srv.Start()
+
+	utils.IgnoreSignal(func() {
+		srv.Close()
+		transfer.Manage.Close()
+		log.Println("service", "退出")
+	})
 }

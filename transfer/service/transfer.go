@@ -1,4 +1,4 @@
-package transfer
+package service
 
 import (
 	"github.com/ranxx/goproxy/proto"
@@ -8,7 +8,7 @@ import (
 
 // var ...
 var (
-	Manage = &manage{indexMange: utils.NewIndexI64(), data: make([]Transfer, 0, 1024*8)}
+	Manage = &manage{indexMange: utils.NewIndexI64(), data: make([]Transfer, 0, 1024)}
 )
 
 func init() {
@@ -18,6 +18,8 @@ func init() {
 // Transfer ...
 type Transfer interface {
 	Start()
+
+	Close()
 
 	Receive(body []byte)
 }
@@ -33,9 +35,16 @@ func (m *manage) NewIndex() int64 {
 	return m.indexMange.NewIndex()
 }
 
+// Close 关闭
+func (m *manage) Close() {
+	for _, v := range m.data {
+		v.Close()
+	}
+}
+
 func (m *manage) customer() {
 	for msg := range service.ReadingMsgChannel {
-		trans := m.data[int(msg.MsgId)]
+		trans := m.data[msg.MsgId]
 		if trans == nil {
 			continue
 		}
@@ -56,6 +65,8 @@ func NewTransfer(localAddr, remoteAddr proto.Addr, network proto.NetworkType) Tr
 	case proto.NetworkType_HTTP:
 		trans = newHTTP(index, localAddr, remoteAddr)
 	case proto.NetworkType_TCP:
+		trans = newTunnelTCP(index, localAddr, remoteAddr)
+	case proto.NetworkType_NotTunnelTCP:
 		trans = newTCP(index, localAddr, remoteAddr)
 	default:
 		trans = newHTTP(index, localAddr, remoteAddr)
@@ -74,6 +85,8 @@ func NewTransferWithIPPort(localIP string, localPort int, remoteIP string, remot
 	case proto.NetworkType_HTTP:
 		trans = newHTTP(index, *localAddr, *remoteAddr)
 	case proto.NetworkType_TCP:
+		trans = newTunnelTCP(index, *localAddr, *remoteAddr)
+	case proto.NetworkType_NotTunnelTCP:
 		trans = newTCP(index, *localAddr, *remoteAddr)
 	default:
 		trans = newHTTP(index, *localAddr, *remoteAddr)

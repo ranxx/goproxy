@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"log"
 	"time"
 )
 
@@ -12,8 +13,25 @@ import (
 type Package struct {
 	Version   [2]byte // 协议版本
 	Length    int64   // 数据部分长度
-	Timestamp int64   // 时间戳
+	Timestamp int64   // 时间戳秒
 	Msg       []byte  // 数据部分长度
+}
+
+// Empty 空pack
+func Empty() *Package {
+	return NewPackage(nil)
+}
+
+// Reset 重置
+func (p *Package) Reset(msg []byte) *Package {
+	p.Timestamp = time.Now().Unix()
+	p.Msg = msg
+	return p
+}
+
+// PreLength 前置长度
+func (p *Package) PreLength() int64 {
+	return 18
 }
 
 // PackBytes ...
@@ -21,6 +39,51 @@ func (p *Package) PackBytes() ([]byte, error) {
 	buffer := bytes.NewBuffer(make([]byte, 0, 2+8+8+len(p.Msg)))
 	err := p.Pack(buffer)
 	return buffer.Bytes(), err
+}
+
+// ReadPre ...
+func (p *Package) ReadPre(reader io.Reader) error {
+	var err error
+	if err = binary.Read(reader, binary.BigEndian, &p.Version); err != nil {
+		return err
+	}
+	if err = binary.Read(reader, binary.BigEndian, &p.Length); err != nil {
+		return err
+	}
+	if err = binary.Read(reader, binary.BigEndian, &p.Timestamp); err != nil {
+		return err
+	}
+	return err
+}
+
+// ReadLast ...
+func (p *Package) ReadLast(reader io.Reader) error {
+	var err error
+	p.Msg = make([]byte, p.Length-2-8-8)
+	err = binary.Read(reader, binary.BigEndian, &p.Msg)
+	return err
+}
+
+func absInt64(in int64) int64 {
+	if in > 0 {
+		return in
+	}
+	return in * -1
+}
+
+// IsPackage 是否为package数据
+func (p *Package) IsPackage(inerval time.Duration) bool {
+	tmp := Empty()
+	if p.Version != tmp.Version {
+		return false
+	}
+
+	in := time.Now().Unix() - p.Timestamp
+
+	if absInt64(in) > int64(inerval/time.Second) {
+		return false
+	}
+	return true
 }
 
 // Pack ...
@@ -52,18 +115,37 @@ func (p *Package) Unpack(reader io.Reader) error {
 
 // SplitFunc split
 func SplitFunc(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	// log.Printf("%t|%d|%s\n", atEOF, len(data), data)
-	if !atEOF && data[0] == 'X' && data[1] == '1' {
-		// Version + length = 2 + 8 = 10 byte
-		if len(data) > 10 {
-			length := int64(0)
-			binary.Read(bytes.NewReader(data[2:10]), binary.BigEndian, &length)
-			if int(length) <= len(data) {
-				return int(length), data[:int(length)], nil
-			}
-		}
+	log.Println(atEOF, len(data))
+	pkg := Package{}
+	if atEOF || len(data) < int(pkg.PreLength()) {
+		return
 	}
-	return
+
+	if err = pkg.ReadPre(bytes.NewReader(data[:pkg.PreLength()])); err != nil {
+		return
+	}
+
+	if pkg.IsPackage(time.Second * 10); err != nil {
+		return
+	}
+
+	if pkg.Length > int64(len(data)) {
+		return
+	}
+	log.Println(atEOF, len(data), pkg.Length)
+	return int(pkg.Length), data[:pkg.Length], nil
+}
+
+// SplitFuncEdgeTriggered ...
+func SplitFuncEdgeTriggered(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	// log.Println("client.tcp", atEOF, len(data))
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
+	if !atEOF {
+		return len(data), data[:], nil
+	}
+	return 0, nil, nil
 }
 
 // NewPackage ...
@@ -78,8 +160,9 @@ func NewPackage(msg []byte) *Package {
 }
 
 // NewScanner ...
-func NewScanner(reader io.Reader) *bufio.Scanner {
+func NewScanner(reader io.Reader, split bufio.SplitFunc) *bufio.Scanner {
 	scanner := bufio.NewScanner(reader)
-	scanner.Split(SplitFunc)
+	scanner.Split(split)
+	scanner.Buffer(nil, 1024*1024*1024)
 	return scanner
 }

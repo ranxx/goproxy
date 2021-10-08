@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"net"
+
+	"github.com/ranxx/goproxy/cconn"
 )
 
 // DefaultPort ...
@@ -11,8 +13,9 @@ var DefaultPort int = 12341
 
 // Service 隧道服务
 type Service struct {
-	IP   string
-	Port int
+	IP       string
+	Port     int
+	listener net.Listener
 }
 
 // NewService ...
@@ -28,6 +31,7 @@ func (s *Service) Start() {
 		log.Println("开启service失败")
 		panic(err)
 	}
+	s.listener = listener
 
 	for {
 		conn, err := listener.Accept()
@@ -35,7 +39,7 @@ func (s *Service) Start() {
 			log.Println("service监听失败")
 			panic(err)
 		}
-		log.Println("service新连接", conn.RemoteAddr())
+		log.Println("service 新连接", conn.RemoteAddr())
 		go s.StartConn(conn)
 	}
 }
@@ -43,7 +47,19 @@ func (s *Service) Start() {
 // StartConn ...
 func (s *Service) StartConn(conn net.Conn) {
 	// 读取数据
-	cconn := NewConn("service", conn)
-	cconn.WithReadFunc(_DefaultReadFunc("service", cconn)).
-		WithWriteFunc(_DefaultWriteFunc("service", cconn)).Start()
+	cconn := cconn.NewConn(
+		"service",
+		conn,
+		cconn.WithReadFunc(_DefaultReadFunc("service")),
+		cconn.WithWriteFunc(_DefaultWriteFunc("service")))
+	cconn.Start()
+}
+
+// Close 关闭服务
+func (s *Service) Close() {
+	// 关闭服务
+	s.listener.Close()
+	// 关闭所有连接
+	close(ReadingMsgChannel)
+	close(WritingMsgChannel)
 }

@@ -4,6 +4,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/ranxx/goproxy/cconn"
 	"github.com/ranxx/goproxy/pack"
 	"github.com/ranxx/goproxy/proto"
 )
@@ -17,66 +18,15 @@ var (
 	WritingMsgChannel = make(chan *proto.Msg, 1024)
 )
 
-// Init ...
-func Init() {
-	close(ReadingMsgChannel)
-	close(WritingMsgChannel)
-	ReadingMsgChannel = make(chan *proto.Msg, 1024)
-	WritingMsgChannel = make(chan *proto.Msg, 1024)
+// Send ...
+func Send(msg *proto.Msg) {
+	WritingMsgChannel <- msg
 }
 
-// // Msg ...
-// type Msg struct {
-// 	Network string      `json:"network"`
-// 	Body    interface{} `json:"body"`
-// }
-
-// // HTTPBody ...
-// type HTTPBody struct {
-// 	Laddr  Addr
-// 	URL    string
-// 	Hander http.Header
-// 	Body   []byte
-// }
-
-// // TCPBody ...
-// type TCPBody struct {
-// 	Raddr, Laddr Addr
-// 	Body         []byte
-// }
-
-// // IsHTTP ...
-// func (msg *Msg) IsHTTP() bool {
-// 	return strings.ToLower(msg.Network) == "http"
-// }
-
-// // PackBytes ...
-// func (msg *Msg) PackBytes() ([]byte, error) {
-// 	buffer := bytes.NewBuffer(make([]byte, 0, 1024*4))
-// 	return buffer.Bytes(), msg.Pack(buffer)
-// }
-
-// // Pack ...
-// func (msg *Msg) Pack(writer io.Writer) error {
-// 	var err error
-// 	err = binary.Write(writer, binary.BigEndian, &msg.Network)
-// 	err = binary.Write(writer, binary.BigEndian, &msg.Body)
-// 	return err
-// }
-
-// // UnpackBytes ...
-// func (msg *Msg) UnpackBytes(body []byte) error {
-// 	buffer := bytes.NewBuffer(body)
-// 	return msg.Unpack(buffer)
-// }
-
-// // Unpack ...
-// func (msg *Msg) Unpack(reader io.Reader) error {
-// 	var err error
-// 	err = binary.Read(reader, binary.BigEndian, &msg.Network)
-// 	err = binary.Read(reader, binary.BigEndian, &msg.Body)
-// 	return err
-// }
+// Read ...
+func Read() *proto.Msg {
+	return <-ReadingMsgChannel
+}
 
 // CheckHTTP ...
 func CheckHTTP(msg *proto.Msg) bool {
@@ -89,8 +39,8 @@ func CheckTCP(msg *proto.Msg) bool {
 }
 
 // _DefaultWriteFunc ...
-func _DefaultWriteFunc(logPrefix string, c *Conn) func(*Conn, chan struct{}) error {
-	return func(c *Conn, closeC chan struct{}) error {
+func _DefaultWriteFunc(logPrefix string) func(*cconn.Conn, <-chan struct{}) error {
+	return func(c *cconn.Conn, closeC <-chan struct{}) error {
 		for {
 			msg := new(proto.Msg)
 			select {
@@ -118,7 +68,7 @@ func _DefaultWriteFunc(logPrefix string, c *Conn) func(*Conn, chan struct{}) err
 
 			wn, err := c.Write(rbody)
 			if err != nil {
-				log.Println(logPrefix, "写入消息失败", err)
+				log.Println(logPrefix, "写入消息失败", "len(msg):", len(rbody), err)
 				return err
 			}
 
@@ -131,9 +81,9 @@ func _DefaultWriteFunc(logPrefix string, c *Conn) func(*Conn, chan struct{}) err
 }
 
 // _DefaultReadFunc ...
-func _DefaultReadFunc(logPrefix string, c *Conn) func(*Conn, chan struct{}) error {
-	return func(c *Conn, closeC chan struct{}) error {
-		scanner := pack.NewScanner(c)
+func _DefaultReadFunc(logPrefix string) func(*cconn.Conn, <-chan struct{}) error {
+	return func(c *cconn.Conn, closeC <-chan struct{}) error {
+		scanner := pack.NewScanner(c, pack.SplitFunc)
 		for scanner.Scan() {
 			scannedPack := new(pack.Package)
 			err := scannedPack.UnpackBytes(scanner.Bytes())

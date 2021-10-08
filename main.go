@@ -20,11 +20,26 @@ func test() {
 	fmt.Println(err, len(body), string(body))
 	body, err = msg.XXX_Marshal(nil, true)
 	fmt.Println(err, len(body), string(body))
+}
+
+func testpack() {
+	body := &proto.TCPBody{
+		MsgId: 2,
+		Laddr: &proto.Addr{Ip: "12", Port: 12},
+		Raddr: &proto.Addr{Ip: "23", Port: 23},
+		Body:  []byte("H"),
+	}
+
+	nbody := new(proto.TCPBody)
+
+	fmt.Println(body)
+	fmt.Println(nbody)
 
 }
 
 func main() {
-
+	testpack()
+	return
 	test()
 	return
 	listenr, err := net.Listen("tcp", ":3022")

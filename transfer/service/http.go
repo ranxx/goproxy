@@ -1,4 +1,4 @@
-package transfer
+package service
 
 import (
 	"context"
@@ -57,6 +57,11 @@ func (h *HTTP) Receive(body []byte) {
 func (h *HTTP) Start() {
 	log.Println("transfer.http", fmt.Sprintf("%s:%d -> %s:%d runing", h.LocalAddr.Ip, h.LocalAddr.Port, h.RemoteAddr.Ip, h.RemoteAddr.Port))
 	http.ListenAndServe(fmt.Sprintf("%s:%d", h.LocalAddr.Ip, h.LocalAddr.Port), h)
+}
+
+// Close 关闭
+func (h *HTTP) Close() {
+
 }
 
 func (h *HTTP) send(body *proto.HTTPBody) *httpBody {

@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"net"
 	"net/http"
 	"syscall"
 	"time"
@@ -12,20 +10,20 @@ import (
 func main() {
 	// test()
 	// return
-	server := http.Server{
-		Handler:      new(httpServer),
-		ReadTimeout:  20 * time.Second,
-		WriteTimeout: 20 * time.Second,
-	}
-	server.SetKeepAlivesEnabled(false)
-	listen, err := net.Listen("tcp4", ":3333")
-	if err != nil {
-		log.Printf("Failed to listen,err:%s\n", err.Error())
-		panic(err)
-	}
-	fmt.Println(server.Serve(listen))
+	// server := http.Server{
+	// 	Handler:      new(httpServer),
+	// 	ReadTimeout:  20 * time.Second,
+	// 	WriteTimeout: 20 * time.Second,
+	// }
+	// server.SetKeepAlivesEnabled(false)
+	// listen, err := net.Listen("tcp4", ":3333")
+	// if err != nil {
+	// 	log.Printf("Failed to listen,err:%s\n", err.Error())
+	// 	panic(err)
+	// }
+	// fmt.Println(server.Serve(listen))
 
-	// http.ListenAndServe(":3333", http.FileServer(http.Dir("/Users/axing")))
+	http.ListenAndServe(":3333", http.FileServer(http.Dir("/Users/axing")))
 	// http.ListenAndServe(":3333", new(httpServer))
 }
 

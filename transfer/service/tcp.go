@@ -1,4 +1,4 @@
-package transfer
+package service
 
 import (
 	"bufio"
@@ -19,11 +19,6 @@ type TCP struct {
 	LocalAddr, RemoteAddr proto.Addr
 }
 
-type tcpConn struct {
-	net.Conn
-	proto.TCPBody
-}
-
 // newTCP ...
 func newTCP(msgID int64, localAddr, remoteAddr proto.Addr) Transfer {
 	return &TCP{
@@ -42,7 +37,6 @@ func (t *TCP) Receive(body []byte) {
 		log.Println("transfer.tcp", "解码返回的消息失败", err)
 		panic(err)
 	}
-
 	log.Println("transfer.tcp", fmt.Sprintf("msgID:%d 收到 %d 返回的数据", t.MsgID, tcpBody.MsgId))
 	t.Indexs[tcpBody.MsgId].Write(tcpBody.Body)
 }
@@ -71,10 +65,15 @@ func (t *TCP) Start() {
 	}
 }
 
+// Close ...
+func (t *TCP) Close() {
+	for _, v := range t.Indexs {
+		v.Close()
+	}
+}
+
 func (t *TCP) connection(index int64, conn net.Conn) {
-	// 开启读数据
-	// 开启绑定
-	//
+	// 开启读，开起写
 	scanner := bufio.NewScanner(conn)
 	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		log.Println("transfer.tcp", atEOF, len(data))

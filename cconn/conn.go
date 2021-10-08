@@ -1,4 +1,4 @@
-package service
+package cconn
 
 import (
 	"fmt"
@@ -18,21 +18,25 @@ type Conn struct {
 
 	closeB bool
 
-	once sync.Once
+	once *sync.Once
 
-	readFunc func(*Conn, chan struct{}) error
+	readFunc func(*Conn, <-chan struct{}) error
 
-	writeFunc func(*Conn, chan struct{}) error
+	writeFunc func(*Conn, <-chan struct{}) error
 }
 
 // NewConn ...
-func NewConn(logPrefix string, conn net.Conn) *Conn {
-	return &Conn{Conn: conn, logPrefix: logPrefix, closeC: make(chan struct{})}
+func NewConn(logPrefix string, conn net.Conn, opts ...Options) *Conn {
+	cconn := &Conn{Conn: conn, logPrefix: logPrefix, closeC: make(chan struct{}), once: new(sync.Once)}
+	for _, v := range opts {
+		v(cconn)
+	}
+	return cconn
 }
 
 // Start ...
 func (conn *Conn) Start() *Conn {
-	// 开启关闭
+	// 开启关闭监听
 	go conn.closing()
 
 	// 开启读
@@ -44,16 +48,14 @@ func (conn *Conn) Start() *Conn {
 	return conn
 }
 
-// WithReadFunc ...
-func (conn *Conn) WithReadFunc(f func(*Conn, chan struct{}) error) *Conn {
-	conn.readFunc = f
-	return conn
+// Close 关闭连接
+func (conn *Conn) Close() {
+	conn.close()
 }
 
-// WithWriteFunc ...
-func (conn *Conn) WithWriteFunc(f func(*Conn, chan struct{}) error) *Conn {
-	conn.writeFunc = f
-	return conn
+// Closed 是否关闭
+func (conn *Conn) Closed() bool {
+	return conn.closed()
 }
 
 func (conn *Conn) close() {
@@ -86,7 +88,9 @@ func (conn *Conn) reading() {
 			time.Sleep(time.Second)
 			continue
 		}
-		conn.readFunc(conn, conn.closeC)
+		if err := conn.readFunc(conn, conn.closeC); err != nil {
+			log.Println(conn.logPrefix, "read:", err)
+		}
 		break
 	}
 }
@@ -101,7 +105,9 @@ func (conn *Conn) writing() {
 			time.Sleep(time.Second)
 			continue
 		}
-		conn.writeFunc(conn, conn.closeC)
+		if err := conn.writeFunc(conn, conn.closeC); err != nil {
+			log.Println(conn.logPrefix, "write:", err)
+		}
 		break
 	}
 }
