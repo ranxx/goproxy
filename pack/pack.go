@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
-	"log"
 	"time"
 )
 
@@ -115,7 +114,7 @@ func (p *Package) Unpack(reader io.Reader) error {
 
 // SplitFunc split
 func SplitFunc(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	log.Println(atEOF, len(data))
+	// log.Println(atEOF, len(data))
 	pkg := Package{}
 	if atEOF || len(data) < int(pkg.PreLength()) {
 		return
@@ -132,7 +131,7 @@ func SplitFunc(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if pkg.Length > int64(len(data)) {
 		return
 	}
-	log.Println(atEOF, len(data), pkg.Length)
+	// log.Println(atEOF, len(data), pkg.Length)
 	return int(pkg.Length), data[:pkg.Length], nil
 }
 

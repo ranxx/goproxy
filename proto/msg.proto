@@ -5,7 +5,7 @@ package proto;
 enum NetworkType {
     HTTP = 0;
     TCP  = 1; // default tunnel
-    NotTunnelTCP = 2;
+    // NotTunnelTCP = 2;
 }
 
 enum MsgType {

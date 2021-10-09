@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"sync"
 
@@ -15,12 +16,13 @@ import (
 
 // HTTP ...
 type HTTP struct {
-	MsgID                 int64
-	IndexManage           *utils.IndexI64
-	Indexs                []*httpBody
-	ReceiveBody           chan *proto.HTTPBody
-	LocalAddr, RemoteAddr proto.Addr
-	mutex                 sync.Mutex
+	network      proto.NetworkType
+	logPrefix    string
+	msgID        int64
+	indexManage  *utils.IndexI64
+	indexs       []*httpBody
+	laddr, raddr proto.Addr
+	mutex        sync.Mutex
 }
 
 type httpBody struct {
@@ -29,46 +31,58 @@ type httpBody struct {
 }
 
 // newHTTP ...
-func newHTTP(msgID int64, localAddr, remoteAddr proto.Addr) Transfer {
+func newHTTP(logPrefix string, network proto.NetworkType, msgID int64, localAddr, remoteAddr proto.Addr) Transfer {
 	return &HTTP{
-		MsgID:       msgID,
-		Indexs:      make([]*httpBody, 512),
-		ReceiveBody: make(chan *proto.HTTPBody, 1024*8),
-		LocalAddr:   localAddr,
-		RemoteAddr:  remoteAddr,
-		IndexManage: utils.NewIndexI64(),
+		network:     network,
+		logPrefix:   fmt.Sprintf("%s %s", logPrefix, utils.TunnelAddrInfo(&localAddr, &remoteAddr)),
+		msgID:       msgID,
+		indexs:      make([]*httpBody, 512),
+		laddr:       localAddr,
+		raddr:       remoteAddr,
+		indexManage: utils.NewIndexI64(),
 	}
 }
 
 // Receive ...
-func (h *HTTP) Receive(body []byte) {
+func (h *HTTP) Receive(body *[]byte) {
 	go func() {
+		if body == nil {
+			return
+		}
 		httpBody := new(proto.HTTPBody)
-		if err := httpBody.XXX_Unmarshal(body); err != nil {
-			log.Println("transfer.http", "解码返回的消息失败", err)
+		if err := httpBody.XXX_Unmarshal(*body); err != nil {
+			log.Println(h.logPrefix, "解码返回的消息失败", err)
 			panic(err)
 		}
-		log.Println("transfer.http", fmt.Sprintf("msgID:%d 收到 %d 返回的数据", h.MsgID, httpBody.MsgId))
-		h.Indexs[httpBody.MsgId].receiveBody <- httpBody
+		log.Println(h.logPrefix, fmt.Sprintf("msgId:%d 收到 %d 返回的数据", h.msgID, httpBody.MsgId))
+		h.indexs[httpBody.MsgId].receiveBody <- httpBody
 	}()
 }
 
 // Start ...
-func (h *HTTP) Start() {
-	log.Println("transfer.http", fmt.Sprintf("%s:%d -> %s:%d runing", h.LocalAddr.Ip, h.LocalAddr.Port, h.RemoteAddr.Ip, h.RemoteAddr.Port))
-	http.ListenAndServe(fmt.Sprintf("%s:%d", h.LocalAddr.Ip, h.LocalAddr.Port), h)
+func (h *HTTP) Start() error {
+	listen, err := net.Listen("tcp", fmt.Sprintf("%s:%d", h.laddr.Ip, h.laddr.Port))
+	if err != nil {
+		return err
+	}
+
+	log.Println(h.logPrefix, "runing")
+	go http.Serve(listen, h)
+	// err := http.ListenAndServe(fmt.Sprintf("%s:%d", h.laddr.Ip, h.laddr.Port), h)
+	// if err != nil {
+	// 	log.Println(h.logPrefix, "监听 %s 失败", utils.AddrString(&h.laddr), err)
+	// }
+	return nil
 }
 
 // Close 关闭
-func (h *HTTP) Close() {
+func (h *HTTP) Close() {}
 
-}
-
-func (h *HTTP) send(body *proto.HTTPBody) *httpBody {
+func (h *HTTP) send(body *proto.HTTPBody) (*httpBody, error) {
 	sendBody, err := body.XXX_Marshal(nil, false)
 	if err != nil {
-		log.Println("transfer.http", "编码httpbody失败", err)
-		panic(err)
+		log.Println(h.logPrefix, "编码httpbody失败", err)
+		return nil, err
 	}
 
 	hbody := &httpBody{HTTPBody: body, receiveBody: make(chan *proto.HTTPBody, 1)}
@@ -76,21 +90,21 @@ func (h *HTTP) send(body *proto.HTTPBody) *httpBody {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
-	h.Indexs = append(h.Indexs, nil)
-	h.Indexs[body.MsgId] = hbody
+	h.indexs = append(h.indexs, nil)
+	h.indexs[body.MsgId] = hbody
 
 	service.WritingMsgChannel <- &proto.Msg{
 		Network: proto.NetworkType_HTTP.String(),
-		MsgId:   h.MsgID,
+		MsgId:   h.msgID,
 		Body:    sendBody,
 	}
-	return hbody
+	return hbody, nil
 }
 
 func (h *HTTP) newProtoHTTPBody(index int64, url, method string, header http.Header, body []byte) *proto.HTTPBody {
 	httpBody := proto.HTTPBody{
 		MsgId: index,
-		Laddr: &h.RemoteAddr,
+		Laddr: &h.raddr,
 		// TODO: url 参数也要携带
 		Url:    url,
 		Method: method,
@@ -110,13 +124,17 @@ func (h *HTTP) oneHTTP(ctx context.Context, w http.ResponseWriter, r *http.Reque
 	// 读取 body
 	bytesBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Println("transfer.http", "读取body失败", err)
-		panic(err)
+		log.Println(h.logPrefix, "读取body失败", err)
+		return
 	}
 
 	pHTTPBody := h.newProtoHTTPBody(index, r.URL.Path, r.Method, r.Header, bytesBody)
 
-	httpBody := h.send(pHTTPBody)
+	httpBody, err := h.send(pHTTPBody)
+	if err != nil {
+		log.Println(h.logPrefix, "发送消息失败", err)
+		return
+	}
 	respBody := <-httpBody.receiveBody
 
 	// 设置返回header
@@ -129,18 +147,28 @@ func (h *HTTP) oneHTTP(ctx context.Context, w http.ResponseWriter, r *http.Reque
 	// 写入消息
 	wn, err := w.Write(respBody.Body)
 	if err != nil {
-		log.Println("transfer.http", "写入body失败", err)
-		panic(err)
+		log.Println(h.logPrefix, "写入body失败", err)
+		return
 	}
 
 	if wn != len(respBody.Body) {
-		log.Println("transfer.http", "写入body失败,消息未写入完整", err)
-		panic(err)
+		log.Println(h.logPrefix, "消息未写入完整", err)
+		return
 	}
+}
+
+// NetWork ...
+func (h *HTTP) NetWork() proto.NetworkType {
+	return h.network
 }
 
 // ServeHTTP ...
 func (h *HTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// index
-	h.oneHTTP(context.TODO(), w, r, h.IndexManage.NewIndex())
+	h.oneHTTP(context.TODO(), w, r, h.indexManage.NewIndex())
+}
+
+// Info ...
+func (h *HTTP) Info() (int64, proto.Addr, proto.Addr) {
+	return h.msgID, h.laddr, h.raddr
 }

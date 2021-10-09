@@ -31,6 +31,7 @@ func (s *Service) Start() {
 		log.Println("开启service失败")
 		panic(err)
 	}
+	log.Println("start service", fmt.Sprintf("%s:%d", s.IP, s.Port))
 	s.listener = listener
 
 	for {

@@ -24,16 +24,21 @@ type rw struct {
 
 // TunnelTCP ...
 type TunnelTCP struct {
+	network      proto.NetworkType
+	logPrefix    string
 	msgID        int64
 	indexManage  *utils.IndexI64
 	indexs       []*rw
 	laddr, raddr proto.Addr
 	once         *sync.Once
+	listen       net.Listener
 }
 
 // newTunnelTCP ...
-func newTunnelTCP(msgID int64, localAddr, remoteAddr proto.Addr) Transfer {
+func newTunnelTCP(logPrefix string, network proto.NetworkType, msgID int64, localAddr, remoteAddr proto.Addr) Transfer {
 	return &TunnelTCP{
+		network:     network,
+		logPrefix:   fmt.Sprintf("%s %s", logPrefix, utils.TunnelAddrInfo(&localAddr, &remoteAddr)),
 		msgID:       msgID,
 		indexManage: utils.NewIndexI64(),
 		laddr:       localAddr,
@@ -44,41 +49,45 @@ func newTunnelTCP(msgID int64, localAddr, remoteAddr proto.Addr) Transfer {
 }
 
 // Receive ...
-func (t *TunnelTCP) Receive(body []byte) {
+func (t *TunnelTCP) Receive(body *[]byte) {
 	// TODO: 处理报错的问题
 
-	tcpBody := new(proto.Bind)
-	if err := tcpBody.XXX_Unmarshal(body); err != nil {
-		log.Println("transfer.tcp", "解码返回的消息失败", err)
-		panic(err)
-	}
-	fmt.Println("收到消息----", tcpBody)
+	// tcpBody := new(proto.Bind)
+	// if err := tcpBody.XXX_Unmarshal(body); err != nil {
+	// 	log.Println("transfer.tcp", "解码返回的消息失败", err)
+	// 	panic(err)
+	// }
+	// fmt.Println("收到消息----", tcpBody)
 	return
 }
 
 // Start 开启服务
-func (t *TunnelTCP) Start() {
-	log.Println("transfer.tcp", fmt.Sprintf("%s:%d -> %s:%d runing", t.laddr.Ip, t.laddr.Port, t.raddr.Ip, t.raddr.Port))
+func (t *TunnelTCP) Start() error {
 	listen, err := net.Listen("tcp", fmt.Sprintf("%s:%d", t.laddr.Ip, t.laddr.Port))
 	if err != nil {
-		log.Println("transfer.tcp", "监听 %s:%d 失败", t.laddr.Ip, t.laddr.Port, err)
-		panic(err)
+		log.Println(t.logPrefix, err)
+		return err
 	}
+	log.Println(t.logPrefix, "runing")
+	t.listen = listen
+	go func() {
+		for {
+			conn, err := listen.Accept()
+			if err != nil {
+				log.Println(t.logPrefix, "接受连接失败", err)
+				return
+			}
 
-	for {
-		conn, err := listen.Accept()
-		if err != nil {
-			panic(err)
+			index := t.indexManage.NewIndex()
+			rw := &rw{Conn: conn, r: conn, w: conn}
+
+			t.indexs = append(t.indexs, rw)
+			t.indexs[index] = rw
+
+			go t.connection(index, conn)
 		}
-
-		index := t.indexManage.NewIndex()
-		rw := &rw{Conn: conn, r: conn, w: conn}
-
-		t.indexs = append(t.indexs, rw)
-		t.indexs[index] = rw
-
-		go t.connection(index, conn)
-	}
+	}()
+	return nil
 }
 
 func (t *TunnelTCP) customerConnection(index int64, conn net.Conn, reader *bufio.Reader) {
@@ -94,11 +103,15 @@ func (t *TunnelTCP) customerConnection(index int64, conn net.Conn, reader *bufio
 		panic(err)
 	}
 	t.indexs[index].r = reader
+
+	log.Println(t.logPrefix, "新连接")
+
 	service.WritingMsgChannel <- &proto.Msg{
 		Network: proto.NetworkType_TCP.String(),
 		MsgId:   t.msgID,
 		Body:    tcpBody,
 	}
+
 	return
 }
 
@@ -143,7 +156,7 @@ func (t *TunnelTCP) connection(index int64, conn net.Conn) {
 	bind := new(proto.Bind)
 	if err := bind.XXX_Unmarshal(packer.Msg); err != nil {
 		// 这里解析失败，证明数据有问题，需要 panic
-		log.Println("msg:", string(packer.Msg))
+		log.Println(t.logPrefix, string(packer.Msg))
 		panic(err)
 	}
 
@@ -173,6 +186,11 @@ func (t *TunnelTCP) connection(index int64, conn net.Conn) {
 	}()
 }
 
+// NetWork ...
+func (t *TunnelTCP) NetWork() proto.NetworkType {
+	return t.network
+}
+
 // Close 关闭
 func (t *TunnelTCP) Close() {
 	t.once.Do(func() {
@@ -182,5 +200,11 @@ func (t *TunnelTCP) Close() {
 			}
 			v.Conn.Close()
 		}
+		t.listen.Close()
 	})
+}
+
+// Info ...
+func (t *TunnelTCP) Info() (int64, proto.Addr, proto.Addr) {
+	return t.msgID, t.laddr, t.raddr
 }

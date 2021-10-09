@@ -17,11 +17,15 @@ func init() {
 
 // Transfer ...
 type Transfer interface {
-	Start()
+	Start() error
 
 	Close()
 
-	Receive(body []byte)
+	NetWork() proto.NetworkType
+
+	Receive(body *[]byte)
+
+	Info() (int64, proto.Addr, proto.Addr)
 }
 
 // Manage ...
@@ -42,13 +46,35 @@ func (m *manage) Close() {
 	}
 }
 
+// Remove ...
+func (m *manage) Remove(id int64) {
+	if id >= int64(len(m.data)) || id < 0 {
+		return
+	}
+	if m.data[id] == nil {
+		return
+	}
+	m.data[id].Close()
+	m.data[id] = nil
+}
+
+// Range ...
+func (m *manage) Range(fc func(v Transfer)) {
+	for _, v := range m.data {
+		if v == nil {
+			continue
+		}
+		fc(v)
+	}
+}
+
 func (m *manage) customer() {
 	for msg := range service.ReadingMsgChannel {
 		trans := m.data[msg.MsgId]
 		if trans == nil {
 			continue
 		}
-		trans.Receive(msg.Body)
+		trans.Receive(&msg.Body)
 	}
 }
 
@@ -63,13 +89,11 @@ func NewTransfer(localAddr, remoteAddr proto.Addr, network proto.NetworkType) Tr
 	var trans Transfer
 	switch network {
 	case proto.NetworkType_HTTP:
-		trans = newHTTP(index, localAddr, remoteAddr)
+		trans = newHTTP("transfer.http", network, index, localAddr, remoteAddr)
 	case proto.NetworkType_TCP:
-		trans = newTunnelTCP(index, localAddr, remoteAddr)
-	case proto.NetworkType_NotTunnelTCP:
-		trans = newTCP(index, localAddr, remoteAddr)
+		trans = newTunnelTCP("transfer.tcp", network, index, localAddr, remoteAddr)
 	default:
-		trans = newHTTP(index, localAddr, remoteAddr)
+		trans = newHTTP("transfer.http", network, index, localAddr, remoteAddr)
 	}
 	Manage.data = append(Manage.data, trans)
 	Manage.data[index] = trans
@@ -83,13 +107,11 @@ func NewTransferWithIPPort(localIP string, localPort int, remoteIP string, remot
 	var trans Transfer
 	switch network {
 	case proto.NetworkType_HTTP:
-		trans = newHTTP(index, *localAddr, *remoteAddr)
+		trans = newHTTP("transfer.http", network, index, *localAddr, *remoteAddr)
 	case proto.NetworkType_TCP:
-		trans = newTunnelTCP(index, *localAddr, *remoteAddr)
-	case proto.NetworkType_NotTunnelTCP:
-		trans = newTCP(index, *localAddr, *remoteAddr)
+		trans = newTunnelTCP("transfer.tcp", network, index, *localAddr, *remoteAddr)
 	default:
-		trans = newHTTP(index, *localAddr, *remoteAddr)
+		trans = newHTTP("transfer.http", network, index, *localAddr, *remoteAddr)
 	}
 	Manage.data = append(Manage.data, trans)
 	Manage.data[index] = trans

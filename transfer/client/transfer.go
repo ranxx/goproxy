@@ -11,7 +11,7 @@ import (
 
 // var ...
 var (
-	Manage = &manage{indexMange: utils.NewIndexI64(), data: make([][]Transfer, 0, 1024)}
+	Manage = &manage{indexMange: utils.NewIndexI64(), data: make([][]Transfer, 1024)}
 )
 
 func init() {
@@ -64,7 +64,7 @@ func (m *manage) customer() {
 func (m *manage) httpHandler(msg *proto.Msg) {
 	body := new(proto.HTTPBody)
 	if err := body.XXX_Unmarshal(msg.Body); err != nil {
-		log.Printf("client.transfer.%s 解码httpBody失败\n", msg.Network)
+		log.Printf("transfer.%s 解码httpBody失败\n", msg.Network)
 		return
 	}
 
@@ -76,7 +76,7 @@ func (m *manage) httpHandler(msg *proto.Msg) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	hhttp := newHTTP("client.transfer.http", msg, body)
+	hhttp := newHTTP("transfer.http", msg, body)
 
 	m.data[msg.MsgId] = append(m.data[msg.MsgId], hhttp)
 	m.data[msg.MsgId][body.MsgId] = hhttp
@@ -87,7 +87,7 @@ func (m *manage) notHTTPHandler(msg *proto.Msg) {
 	// 解包
 	body := new(proto.TCPBody)
 	if err := body.XXX_Unmarshal(msg.Body); err != nil {
-		log.Printf("client.transfer.%s 解码tcpbody失败\n", msg.Network)
+		log.Printf("transfer.%s 解码tcpbody失败\n", msg.Network)
 		return
 	}
 
@@ -100,15 +100,15 @@ func (m *manage) notHTTPHandler(msg *proto.Msg) {
 }
 
 func (m *manage) tunnel(msg *proto.Msg, body *proto.TCPBody) {
-	if int64(len(m.data[msg.MsgId])) > body.MsgId {
-		m.data[msg.MsgId][body.MsgId].Receive(&body.Body)
-		return
-	}
+	// if int64(len(m.data[msg.MsgId])) > body.MsgId {
+	// 	m.data[msg.MsgId][body.MsgId].Receive(&body.Body)
+	// 	return
+	// }
 
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	ttcp := newTunnelTCP("client.transfer.tunnel.tcp", msg, body)
+	ttcp := newTunnelTCP("transfer.tcp", msg, body)
 	m.data[msg.MsgId] = append(m.data[msg.MsgId], ttcp)
-	m.data[msg.MsgId][body.MsgId] = ttcp
+	// m.data[msg.MsgId][body.MsgId] = ttcp
 	ttcp.Start()
 }
