@@ -63,7 +63,7 @@ func (t *TunnelTCP) Receive(body *[]byte) {
 
 // Start 开启服务
 func (t *TunnelTCP) Start() error {
-	listen, err := net.Listen("tcp", fmt.Sprintf("%s:%d", t.laddr.Ip, t.laddr.Port))
+	listen, err := net.Listen("tcp", fmt.Sprintf("%s:%d", "", t.laddr.Port))
 	if err != nil {
 		log.Println(t.logPrefix, err)
 		return err
@@ -94,7 +94,7 @@ func (t *TunnelTCP) customerConnection(index int64, conn net.Conn, reader *bufio
 	pTCPBody := &proto.TCPBody{
 		MsgId: index,
 		Laddr: &t.raddr,
-		Raddr: &proto.Addr{Ip: "", Port: t.laddr.Port},
+		Raddr: &proto.Addr{Ip: t.laddr.Ip, Port: t.laddr.Port},
 		Body:  nil,
 	}
 	tcpBody, err := pTCPBody.XXX_Marshal(nil, false)
@@ -171,14 +171,18 @@ func (t *TunnelTCP) connection(index int64, conn net.Conn) {
 	// 开启读写
 	once := new(sync.Once)
 	go func() {
-		log.Println(io.Copy(conn, inRW.r))
+		if rn, err := io.Copy(conn, inRW.r); err != nil {
+			log.Println(t.logPrefix, rn, err)
+		}
 		once.Do(func() {
 			inRW.Conn.Close()
 			conn.Close()
 		})
 	}()
 	go func() {
-		log.Println(io.Copy(inRW.w, reader))
+		if rn, err := io.Copy(inRW.w, reader); err != nil {
+			log.Println(t.logPrefix, rn, err)
+		}
 		once.Do(func() {
 			inRW.Conn.Close()
 			conn.Close()
@@ -200,7 +204,9 @@ func (t *TunnelTCP) Close() {
 			}
 			v.Conn.Close()
 		}
-		t.listen.Close()
+		if t.listen != nil {
+			t.listen.Close()
+		}
 	})
 }
 

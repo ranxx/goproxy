@@ -2,6 +2,8 @@ package utils
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/ranxx/goproxy/proto"
 )
@@ -14,4 +16,19 @@ func TunnelAddrInfo(laddr, raddr *proto.Addr) string {
 // AddrString ...
 func AddrString(addr *proto.Addr) string {
 	return fmt.Sprintf("%s:%d", addr.Ip, addr.Port)
+}
+
+// ParseAddrString ...
+func ParseAddrString(addr string) (ip string, port int, err error) {
+	index := strings.LastIndex(addr, ":")
+	if index < 0 || index == len(addr)-1 {
+		return "", 0, fmt.Errorf("不支持的格式")
+	}
+	port, err = strconv.Atoi(addr[index+1:])
+	if err != nil {
+		return
+	}
+
+	ip = addr[:index]
+	return
 }

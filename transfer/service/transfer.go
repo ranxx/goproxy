@@ -68,6 +68,20 @@ func (m *manage) Range(fc func(v Transfer)) {
 	}
 }
 
+// RemoveByPort ...
+func (m *manage) RemoveByPort(port ...int) {
+	exists := map[int]bool{}
+	for _, v := range port {
+		exists[v] = true
+	}
+	for _, v := range m.data {
+		id, l, _ := v.Info()
+		if exists[int(l.Port)] {
+			m.data[id].Close()
+		}
+	}
+}
+
 func (m *manage) customer() {
 	for msg := range service.ReadingMsgChannel {
 		trans := m.data[msg.MsgId]

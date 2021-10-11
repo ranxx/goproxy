@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ranxx/goproxy/cconn"
+	"github.com/ranxx/goproxy/proto"
 )
 
 // Client 客户端
@@ -27,8 +28,8 @@ func NewClient(ip string, port int) *Client {
 func (c *Client) reset() {
 	c.Conn = nil
 	c.once = &sync.Once{}
-	// ReadingMsgChannel = make(chan *proto.Msg, 1024)
-	// WritingMsgChannel = make(chan *proto.Msg, 1024)
+	ReadingMsgChannel = make(chan *proto.Msg, 1024)
+	WritingMsgChannel = make(chan *proto.Msg, 1024)
 }
 
 // Close ...
@@ -38,8 +39,10 @@ func (c *Client) Close() {
 			c.Conn.Close()
 			c.Conn = nil
 		}
-		// close(ReadingMsgChannel)
-		// close(WritingMsgChannel)
+		close(ReadingMsgChannel)
+		close(WritingMsgChannel)
+		ReadingMsgChannel = nil
+		WritingMsgChannel = nil
 	})
 }
 

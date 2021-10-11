@@ -144,7 +144,7 @@ func (h *HTTP) oneHTTP(ctx context.Context, w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	// 写入消息
+	// 写回消息
 	wn, err := w.Write(respBody.Body)
 	if err != nil {
 		log.Println(h.logPrefix, "写入body失败", err)

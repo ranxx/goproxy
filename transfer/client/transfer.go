@@ -3,6 +3,7 @@ package client
 import (
 	"log"
 	"sync"
+	"time"
 
 	"github.com/ranxx/goproxy/proto"
 	"github.com/ranxx/goproxy/service"
@@ -49,15 +50,21 @@ func (m *manage) Close() {
 }
 
 func (m *manage) customer() {
-	for msg := range service.ReadingMsgChannel {
-		if int64(len(m.data)) <= msg.MsgId {
-			m.data = append(m.data, make([]Transfer, 0, 512))
-		}
-		if service.CheckHTTP(msg) {
-			go m.httpHandler(msg)
+	for {
+		time.Sleep(time.Second * 2)
+		if service.ReadingMsgChannel == nil {
 			continue
 		}
-		go m.notHTTPHandler(msg)
+		for msg := range service.ReadingMsgChannel {
+			if int64(len(m.data)) <= msg.MsgId {
+				m.data = append(m.data, make([]Transfer, 0, 512))
+			}
+			if service.CheckHTTP(msg) {
+				go m.httpHandler(msg)
+				continue
+			}
+			go m.notHTTPHandler(msg)
+		}
 	}
 }
 

@@ -10,8 +10,12 @@ import (
 	transfer "github.com/ranxx/goproxy/transfer/service"
 )
 
-// Transfer ...
-type Transfer struct{}
+// Message ...
+type Message struct {
+	Code int32       `json:"code"`
+	Msg  string      `json:"msg"`
+	Data interface{} `json:"data"`
+}
 
 func initTransferRouter(e *gin.Engine) {
 	t := new(Transfer)
@@ -21,18 +25,18 @@ func initTransferRouter(e *gin.Engine) {
 	// tcp
 	g.POST("/tcp", t.NewTCP)
 	g.DELETE("/tcp/:id", t.CloseTCP)
-
-	// http
-	g.POST("/http", t.NewHTTP)
-	g.DELETE("/http/:id", t.CloseHTTP)
+	g.DELETE("/port", t.RemovePorts)
 }
 
 type listResp struct {
-	ID      int64
-	Network proto.NetworkType
-	Laddr   proto.Addr `json:"laddr"`
-	Raddr   proto.Addr `json:"raddr"`
+	ID      int64             `json:"id"`
+	Network proto.NetworkType `json:"network"`
+	Laddr   proto.Addr        `json:"laddr"`
+	Raddr   proto.Addr        `json:"raddr"`
 }
+
+// Transfer ...
+type Transfer struct{}
 
 // List 列表
 func (t *Transfer) List(ctx *gin.Context) {
@@ -47,87 +51,98 @@ func (t *Transfer) List(ctx *gin.Context) {
 		}
 		res = append(res, tmp)
 	})
-	ctx.JSON(http.StatusOK, res)
+
+	ctx.JSON(http.StatusOK, Message{
+		Code: http.StatusBadRequest,
+		Msg:  "ok",
+		Data: res,
+	})
 }
 
 type newTCPReq struct {
-	Laddr proto.Addr `json:"laddr"`
-	Raddr proto.Addr `json:"raddr"`
+	Laddr []proto.Addr `json:"laddr"`
+	Raddr proto.Addr   `json:"raddr"`
+	// Machine string       `json:"machine"`
 }
 
 // NewTCP 新建tcp
 func (t *Transfer) NewTCP(ctx *gin.Context) {
 	req := new(newTCPReq)
 	if err := ctx.BindJSON(req); err != nil {
-		ctx.Writer.Write([]byte(fmt.Sprintf("%s", err)))
+		ctx.JSON(http.StatusOK, Message{
+			Code: http.StatusBadRequest,
+			Msg:  err.Error(),
+		})
 		ctx.Abort()
 		return
 	}
 
-	err := transfer.NewTransferWithIPPort(req.Laddr.Ip, int(req.Laddr.Port), req.Raddr.Ip, int(req.Raddr.Port), proto.NetworkType_TCP).Start()
-	if err != nil {
-		ctx.Writer.Write([]byte(fmt.Sprintf("%s", err)))
-		ctx.Abort()
-		return
+	for _, laddr := range req.Laddr {
+		err := transfer.NewTransferWithIPPort(laddr.Ip, int(laddr.Port), req.Raddr.Ip, int(req.Raddr.Port), proto.NetworkType_TCP).Start()
+		if err != nil {
+			ctx.JSON(http.StatusOK, Message{
+				Code: http.StatusBadRequest,
+				Msg:  err.Error(),
+			})
+			ctx.Abort()
+			return
+		}
 	}
 
-	ctx.String(http.StatusOK, "ok")
+	ctx.JSON(http.StatusOK, Message{
+		Code: http.StatusOK,
+		Msg:  "ok",
+	})
 }
 
 // CloseTCP 关闭tcp
 func (t *Transfer) CloseTCP(ctx *gin.Context) {
 	id, ok := ctx.Params.Get("id")
 	if !ok {
-		ctx.Writer.Write([]byte(fmt.Sprintf("%s", "没有必要参数id")))
+		ctx.JSON(http.StatusOK, Message{
+			Code: http.StatusBadRequest,
+			Msg:  fmt.Sprintf("%s", "没有必要参数id"),
+		})
 		ctx.Abort()
 		return
 	}
 
 	_id, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
-		ctx.Writer.Write([]byte(fmt.Sprintf("%s", "id不是一个整数类型")))
+		ctx.JSON(http.StatusOK, Message{
+			Code: http.StatusBadRequest,
+			Msg:  fmt.Sprintf("%s", "id不是一个整数类型"),
+		})
 		ctx.Abort()
 		return
 	}
 
 	transfer.Manage.Remove(_id)
-	ctx.String(http.StatusOK, "ok")
+	ctx.JSON(http.StatusOK, Message{
+		Code: http.StatusOK,
+		Msg:  "ok",
+	})
 }
 
-// NewHTTP ...
-func (t *Transfer) NewHTTP(ctx *gin.Context) {
-	req := new(newTCPReq)
+type removePorts struct {
+	Ports []int `json:"ports"`
+}
+
+// RemovePorts 按端口移除
+func (t *Transfer) RemovePorts(ctx *gin.Context) {
+	req := new(removePorts)
 	if err := ctx.BindJSON(req); err != nil {
-		ctx.Writer.Write([]byte(fmt.Sprintf("%s", err)))
+		ctx.JSON(http.StatusOK, Message{
+			Code: http.StatusBadRequest,
+			Msg:  err.Error(),
+		})
 		ctx.Abort()
 		return
 	}
 
-	err := transfer.NewTransferWithIPPort(req.Laddr.Ip, int(req.Laddr.Port), req.Raddr.Ip, int(req.Raddr.Port), proto.NetworkType_HTTP).Start()
-	if err != nil {
-		ctx.Writer.Write([]byte(fmt.Sprintf("%s", err)))
-		ctx.Abort()
-		return
-	}
-	ctx.String(http.StatusOK, "ok")
-}
-
-// CloseHTTP ...
-func (t *Transfer) CloseHTTP(ctx *gin.Context) {
-	id, ok := ctx.Params.Get("id")
-	if !ok {
-		ctx.Writer.Write([]byte(fmt.Sprintf("%s", "没有必要参数id")))
-		ctx.Abort()
-		return
-	}
-
-	_id, err := strconv.ParseInt(id, 10, 64)
-	if err != nil {
-		ctx.Writer.Write([]byte(fmt.Sprintf("%s", "id不是一个整数类型")))
-		ctx.Abort()
-		return
-	}
-
-	transfer.Manage.Remove(_id)
-	ctx.String(http.StatusOK, "ok")
+	transfer.Manage.RemoveByPort(req.Ports...)
+	ctx.JSON(http.StatusOK, Message{
+		Code: http.StatusOK,
+		Msg:  "ok",
+	})
 }

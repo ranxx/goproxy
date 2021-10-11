@@ -64,7 +64,7 @@ func _DefaultWriteFunc(logPrefix string) func(*cconn.Conn, <-chan struct{}) erro
 				return err
 			}
 
-			// log.Println("service", "写入消息", len(msg.Body))
+			log.Println(logPrefix, "写回消息", len(msg.Body))
 
 			wn, err := c.Write(rbody)
 			if err != nil {

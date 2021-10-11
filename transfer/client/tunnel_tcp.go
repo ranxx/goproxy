@@ -71,12 +71,16 @@ func (t *TunnelTCP) Start() {
 	// 开启读写
 	go func() {
 		defer t.Close()
-		io.Copy(localConn, remoteConn)
+		if rn, err := io.Copy(localConn, remoteConn); err != nil {
+			log.Println(t.logPrefix, rn, err)
+		}
 	}()
 
 	go func() {
 		defer t.Close()
-		io.Copy(remoteConn, localConn)
+		if rn, err := io.Copy(remoteConn, localConn); err != nil {
+			log.Println(t.logPrefix, rn, err)
+		}
 	}()
 }
 
