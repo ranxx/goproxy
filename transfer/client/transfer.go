@@ -52,10 +52,10 @@ func (m *manage) Close() {
 func (m *manage) customer() {
 	for {
 		time.Sleep(time.Second * 2)
-		if service.ReadingMsgChannel == nil {
+		if service.ClientReadingMsgChannel == nil {
 			continue
 		}
-		for msg := range service.ReadingMsgChannel {
+		for msg := range service.ClientReadingMsgChannel {
 			if int64(len(m.data)) <= msg.MsgId {
 				m.data = append(m.data, make([]Transfer, 0, 512))
 			}

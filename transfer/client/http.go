@@ -79,7 +79,7 @@ func (h *HTTP) Receive(body *[]byte) {
 		return
 	}
 
-	service.WritingMsgChannel <- &proto.Msg{
+	service.ClientWritingMsgChannel <- &proto.Msg{
 		Network: h.msg.Network,
 		MsgId:   h.msg.MsgId,
 		Body:    rbody,

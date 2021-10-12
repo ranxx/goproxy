@@ -33,6 +33,7 @@ type listResp struct {
 	Network proto.NetworkType `json:"network"`
 	Laddr   proto.Addr        `json:"laddr"`
 	Raddr   proto.Addr        `json:"raddr"`
+	Machine string            `json:"machine"`
 }
 
 // Transfer ...
@@ -42,27 +43,28 @@ type Transfer struct{}
 func (t *Transfer) List(ctx *gin.Context) {
 	res := make([]*listResp, 0, 512)
 	transfer.Manage.Range(func(v transfer.Transfer) {
-		id, laddr, raddr := v.Info()
+		info := v.Info()
 		tmp := &listResp{
-			ID:      id,
+			ID:      info.Index,
 			Network: v.NetWork(),
-			Laddr:   laddr,
-			Raddr:   raddr,
+			Laddr:   info.Laddr,
+			Raddr:   info.Raddr,
+			Machine: info.Machine,
 		}
 		res = append(res, tmp)
 	})
 
 	ctx.JSON(http.StatusOK, Message{
-		Code: http.StatusBadRequest,
+		Code: http.StatusOK,
 		Msg:  "ok",
 		Data: res,
 	})
 }
 
 type newTCPReq struct {
-	Laddr []proto.Addr `json:"laddr"`
-	Raddr proto.Addr   `json:"raddr"`
-	// Machine string       `json:"machine"`
+	Laddr   []proto.Addr `json:"laddr"`
+	Raddr   proto.Addr   `json:"raddr"`
+	Machine string       `json:"machine"`
 }
 
 // NewTCP 新建tcp
@@ -78,7 +80,7 @@ func (t *Transfer) NewTCP(ctx *gin.Context) {
 	}
 
 	for _, laddr := range req.Laddr {
-		err := transfer.NewTransferWithIPPort(laddr.Ip, int(laddr.Port), req.Raddr.Ip, int(req.Raddr.Port), proto.NetworkType_TCP).Start()
+		err := transfer.NewTransferWithIPPort(req.Machine, laddr.Ip, int(laddr.Port), req.Raddr.Ip, int(req.Raddr.Port), proto.NetworkType_TCP).Start()
 		if err != nil {
 			ctx.JSON(http.StatusOK, Message{
 				Code: http.StatusBadRequest,

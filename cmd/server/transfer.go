@@ -31,6 +31,7 @@ eg:
 
 	a.laddrs = add.Flags().StringSliceP("laddr", "l", nil, "localhost addr")
 	a.raddr = add.Flags().StringP("raddr", "r", "", "remote addr")
+	a.machine = add.Flags().StringP("machine", "m", "", "client ip:port；可通过server list命令获取")
 	add.MarkFlagRequired("laddr")
 	add.MarkFlagRequired("raddr")
 	return add
@@ -54,10 +55,11 @@ func (a *addCommand) Run(cmd *cobra.Command, args []string) {
 	url := fmt.Sprintf("%s:%d/transfer/tcp", "http://localhost", 12351)
 
 	req := struct {
-		Laddr []proto.Addr `json:"laddr"`
-		Raddr proto.Addr   `json:"raddr"`
+		Laddr   []proto.Addr `json:"laddr"`
+		Raddr   proto.Addr   `json:"raddr"`
+		Machine string       `json:"machine"`
 	}{
-		Laddr: l, Raddr: r,
+		Laddr: l, Raddr: r, Machine: *a.machine,
 	}
 
 	resp := api.Message{}
@@ -112,10 +114,12 @@ func (r *removeCommand) Run(cmd *cobra.Command, args []string) {
 	fmt.Println(resp.Code, resp.Msg, resp.Data)
 }
 
-type listCommand struct{}
+type listCommand struct {
+	transfer *bool
+}
 
 func (l *listCommand) Cmd() *cobra.Command {
-	remove := &cobra.Command{
+	list := &cobra.Command{
 		Use:   "list",
 		Short: "列表transfer",
 		Long: `内网穿透服务端，列表transfer
@@ -123,11 +127,20 @@ eg:
 1) goproxy server list`,
 		Run: l.Run,
 	}
-	return remove
+	l.transfer = list.Flags().BoolP("transfer", "t", false, "查看tansfer列表")
+	return list
 }
 
 func (l *listCommand) Run(cmd *cobra.Command, args []string) {
+	if l.transfer == nil || *l.transfer == false {
+		l.ListClient()
+		return
+	}
+	l.ListTransfer()
+	return
+}
 
+func (l *listCommand) ListTransfer() {
 	url := fmt.Sprintf("%s:%d/transfer", "http://localhost", 12351)
 
 	resp := api.Message{}
@@ -140,6 +153,23 @@ func (l *listCommand) Run(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	data, err := json.MarshalIndent(resp.Data, "", "\t")
+	data, err := json.MarshalIndent(resp.Data, "", "    ")
+	fmt.Println(string(data))
+}
+
+func (l *listCommand) ListClient() {
+	url := fmt.Sprintf("%s:%d/client", "http://localhost", 12351)
+
+	resp := api.Message{}
+	err := grequests.Get(context.TODO(), url, nil, &resp)
+	if err != nil {
+		panic(err)
+	}
+	if resp.Data == nil {
+		fmt.Println(resp.Code, resp.Msg, resp.Data)
+		return
+	}
+
+	data, err := json.MarshalIndent(resp.Data, "", "    ")
 	fmt.Println(string(data))
 }

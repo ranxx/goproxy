@@ -32,12 +32,14 @@ type TunnelTCP struct {
 	laddr, raddr proto.Addr
 	once         *sync.Once
 	listen       net.Listener
+	machine      string // client 机器地址 ip:port
 }
 
 // newTunnelTCP ...
-func newTunnelTCP(logPrefix string, network proto.NetworkType, msgID int64, localAddr, remoteAddr proto.Addr) Transfer {
+func newTunnelTCP(logPrefix, machine string, network proto.NetworkType, msgID int64, localAddr, remoteAddr proto.Addr) Transfer {
 	return &TunnelTCP{
 		network:     network,
+		machine:     machine,
 		logPrefix:   fmt.Sprintf("%s %s", logPrefix, utils.TunnelAddrInfo(&localAddr, &remoteAddr)),
 		msgID:       msgID,
 		indexManage: utils.NewIndexI64(),
@@ -104,13 +106,19 @@ func (t *TunnelTCP) customerConnection(index int64, conn net.Conn, reader *bufio
 	}
 	t.indexs[index].r = reader
 
-	log.Println(t.logPrefix, "新连接")
+	log.Println(t.logPrefix, "新连接", index)
 
-	service.WritingMsgChannel <- &proto.Msg{
+	service.SendMsg(t.machine, &proto.Msg{
 		Network: proto.NetworkType_TCP.String(),
 		MsgId:   t.msgID,
 		Body:    tcpBody,
-	}
+	})
+
+	// service.WritingMsgChannel <- &proto.Msg{
+	// 	Network: proto.NetworkType_TCP.String(),
+	// 	MsgId:   t.msgID,
+	// 	Body:    tcpBody,
+	// }
 
 	return
 }
@@ -211,6 +219,11 @@ func (t *TunnelTCP) Close() {
 }
 
 // Info ...
-func (t *TunnelTCP) Info() (int64, proto.Addr, proto.Addr) {
-	return t.msgID, t.laddr, t.raddr
+func (t *TunnelTCP) Info() Info {
+	return Info{
+		Index:   t.msgID,
+		Laddr:   t.laddr,
+		Raddr:   t.raddr,
+		Machine: t.machine,
+	}
 }

@@ -93,11 +93,12 @@ func (h *HTTP) send(body *proto.HTTPBody) (*httpBody, error) {
 	h.indexs = append(h.indexs, nil)
 	h.indexs[body.MsgId] = hbody
 
-	service.WritingMsgChannel <- &proto.Msg{
+	service.GlobalWritingMsgChannel <- &proto.Msg{
 		Network: proto.NetworkType_HTTP.String(),
 		MsgId:   h.msgID,
 		Body:    sendBody,
 	}
+
 	return hbody, nil
 }
 
@@ -169,6 +170,11 @@ func (h *HTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // Info ...
-func (h *HTTP) Info() (int64, proto.Addr, proto.Addr) {
-	return h.msgID, h.laddr, h.raddr
+func (h *HTTP) Info() Info {
+	return Info{
+		Index:   h.msgID,
+		Laddr:   h.laddr,
+		Raddr:   h.raddr,
+		Machine: "",
+	}
 }

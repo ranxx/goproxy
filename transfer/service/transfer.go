@@ -15,6 +15,13 @@ func init() {
 	go Manage.customer()
 }
 
+// Info 信息
+type Info struct {
+	Index        int64
+	Laddr, Raddr proto.Addr
+	Machine      string
+}
+
 // Transfer ...
 type Transfer interface {
 	Start() error
@@ -25,7 +32,7 @@ type Transfer interface {
 
 	Receive(body *[]byte)
 
-	Info() (int64, proto.Addr, proto.Addr)
+	Info() Info
 }
 
 // Manage ...
@@ -75,22 +82,24 @@ func (m *manage) RemoveByPort(port ...int) {
 		exists[v] = true
 	}
 	for _, v := range m.data {
-		id, l, _ := v.Info()
-		if exists[int(l.Port)] {
-			m.data[id].Close()
+		info := v.Info()
+		if exists[int(info.Laddr.Port)] {
+			m.data[info.Index].Close()
 		}
 	}
 }
 
 func (m *manage) customer() {
-	for msg := range service.ReadingMsgChannel {
+	for msg := range service.GlobalReadingMsgChannel {
 		trans := m.data[msg.MsgId]
 		if trans == nil {
 			continue
 		}
-		trans.Receive(&msg.Body)
+		go trans.Receive(&msg.Body)
 	}
 }
+
+// 开启消费
 
 // NewAddr ...
 func NewAddr(ip string, port int) *proto.Addr {
@@ -98,14 +107,14 @@ func NewAddr(ip string, port int) *proto.Addr {
 }
 
 // NewTransfer ...
-func NewTransfer(localAddr, remoteAddr proto.Addr, network proto.NetworkType) Transfer {
+func NewTransfer(machine string, localAddr, remoteAddr proto.Addr, network proto.NetworkType) Transfer {
 	index := Manage.NewIndex()
 	var trans Transfer
 	switch network {
 	case proto.NetworkType_HTTP:
 		trans = newHTTP("transfer.http", network, index, localAddr, remoteAddr)
 	case proto.NetworkType_TCP:
-		trans = newTunnelTCP("transfer.tcp", network, index, localAddr, remoteAddr)
+		trans = newTunnelTCP("transfer.tcp", machine, network, index, localAddr, remoteAddr)
 	default:
 		trans = newHTTP("transfer.http", network, index, localAddr, remoteAddr)
 	}
@@ -115,7 +124,7 @@ func NewTransfer(localAddr, remoteAddr proto.Addr, network proto.NetworkType) Tr
 }
 
 // NewTransferWithIPPort ...
-func NewTransferWithIPPort(localIP string, localPort int, remoteIP string, remotePort int, network proto.NetworkType) Transfer {
+func NewTransferWithIPPort(machine, localIP string, localPort int, remoteIP string, remotePort int, network proto.NetworkType) Transfer {
 	localAddr, remoteAddr := NewAddr(localIP, localPort), NewAddr(remoteIP, remotePort)
 	index := Manage.NewIndex()
 	var trans Transfer
@@ -123,7 +132,7 @@ func NewTransferWithIPPort(localIP string, localPort int, remoteIP string, remot
 	case proto.NetworkType_HTTP:
 		trans = newHTTP("transfer.http", network, index, *localAddr, *remoteAddr)
 	case proto.NetworkType_TCP:
-		trans = newTunnelTCP("transfer.tcp", network, index, *localAddr, *remoteAddr)
+		trans = newTunnelTCP("transfer.tcp", machine, network, index, *localAddr, *remoteAddr)
 	default:
 		trans = newHTTP("transfer.http", network, index, *localAddr, *remoteAddr)
 	}

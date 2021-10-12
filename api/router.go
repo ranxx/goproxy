@@ -7,6 +7,7 @@ func Init() *gin.Engine {
 	e := gin.New()
 
 	initTransferRouter(e)
+	initClientRouter(e)
 
 	return e
 }
