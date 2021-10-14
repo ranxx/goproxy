@@ -1,5 +1,18 @@
 # goproxy 更新日志
 
+## 2021.10.14
+
+配置文件的支持：支持json和yaml两种配置文件，其余默认使用yaml解析
+```yaml
+app: goproxy
+server:
+  ip: nat.cutenss.com
+  port: 12341
+  apiPort: 12351
+clients:
+transfer:
+```
+
 ## 2021.10.12
 
 内网穿透：支持多client模式，transfer支持穿透某个client的port，只需要在新建transfer时指定machine参数

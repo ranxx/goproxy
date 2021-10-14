@@ -1,9 +1,0 @@
-FROM ubuntu:latest
-
-WORKDIR /goproxy
-
-ADD ./client/client /goproxy
-
-EXPOSE 12341
-
-CMD ["/goproxy/client"]

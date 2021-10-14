@@ -63,7 +63,8 @@ func (c *Client) Close() {
 }
 
 func (c *Client) dail() (net.Conn, error) {
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", c.IP, c.Port), time.Second*10)
+	dial := net.Dialer{Timeout: time.Second * 10 /* LocalAddr: &net.TCPAddr{Port: 14321} */}
+	conn, err := dial.Dial("tcp", fmt.Sprintf("%s:%d", c.IP, c.Port))
 	return conn, err
 }
 

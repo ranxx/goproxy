@@ -150,8 +150,8 @@ func (cli *client) HeartBeat() {
 		case <-time.After(time.Second * 3):
 		case rhb = <-cli.HeartBeatChannel:
 		}
-		// 检测时间 是否在5秒钟内
-		if rhb.Now-hb.Now >= 0 && rhb.Now-hb.Now <= 3 {
+		// 检测时间 是否在5秒钟内，这里不保证两端时间相同，所以取±3
+		if rhb.Now-hb.Now >= -3 && rhb.Now-hb.Now <= 3 {
 			// 通过
 			time.Sleep(time.Second * 3)
 		} else {

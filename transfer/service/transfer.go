@@ -30,7 +30,7 @@ type Transfer interface {
 
 	NetWork() proto.NetworkType
 
-	Receive(body *[]byte)
+	Receive(body *proto.Msg)
 
 	Info() Info
 }
@@ -95,7 +95,7 @@ func (m *manage) customer() {
 		if trans == nil {
 			continue
 		}
-		go trans.Receive(&msg.Body)
+		go trans.Receive(msg)
 	}
 }
 

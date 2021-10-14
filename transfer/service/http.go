@@ -44,13 +44,13 @@ func newHTTP(logPrefix string, network proto.NetworkType, msgID int64, localAddr
 }
 
 // Receive ...
-func (h *HTTP) Receive(body *[]byte) {
+func (h *HTTP) Receive(bodyp *proto.Msg) {
 	go func() {
-		if body == nil {
+		if bodyp == nil || bodyp.Body == nil {
 			return
 		}
 		httpBody := new(proto.HTTPBody)
-		if err := httpBody.XXX_Unmarshal(*body); err != nil {
+		if err := httpBody.XXX_Unmarshal(bodyp.Body); err != nil {
 			log.Println(h.logPrefix, "解码返回的消息失败", err)
 			panic(err)
 		}

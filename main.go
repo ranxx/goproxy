@@ -6,8 +6,14 @@ import (
 	"net"
 
 	proto3 "github.com/golang/protobuf/proto"
+	"github.com/ranxx/goproxy/config"
 	"github.com/ranxx/goproxy/proto"
 )
+
+func testConfig() {
+	cfg := config.ParseYamlFile("./config/config.yaml")
+	fmt.Println(cfg)
+}
 
 func test() {
 	msg := proto.Msg{
@@ -38,6 +44,8 @@ func testpack() {
 }
 
 func main() {
+	testConfig()
+	return
 	testpack()
 	return
 	test()

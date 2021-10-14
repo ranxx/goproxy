@@ -1,0 +1,8 @@
+app: goproxy
+server:
+  # ip: nat.cutenss.com
+  ip: 
+  port: 12341
+  apiPort: 12351
+clients:
+transfer:

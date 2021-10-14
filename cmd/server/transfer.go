@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/ranxx/goproxy/api"
+	"github.com/ranxx/goproxy/config"
 	"github.com/ranxx/goproxy/proto"
 	"github.com/ranxx/goproxy/utils"
 	"github.com/ranxx/grequests"
@@ -52,7 +53,7 @@ func (a *addCommand) Run(cmd *cobra.Command, args []string) {
 	}
 	r := proto.Addr{Ip: raddrIP, Port: int32(raddrPort)}
 
-	url := fmt.Sprintf("%s:%d/transfer/tcp", "http://localhost", 12351)
+	url := fmt.Sprintf("%s:%d/transfer/tcp", utils.RetRealHTTP(config.Cfg.Server.IP), config.Cfg.Server.APIPort)
 
 	req := struct {
 		Laddr   []proto.Addr `json:"laddr"`
@@ -97,7 +98,7 @@ func (r *removeCommand) Run(cmd *cobra.Command, args []string) {
 		ports = append(ports, port)
 	}
 
-	url := fmt.Sprintf("%s:%d/transfer/port", "http://localhost", 12351)
+	url := fmt.Sprintf("%s:%d/transfer/port", utils.RetRealHTTP(config.Cfg.Server.IP), config.Cfg.Server.APIPort)
 
 	req := struct {
 		Ports []int `json:"ports"`
@@ -141,7 +142,7 @@ func (l *listCommand) Run(cmd *cobra.Command, args []string) {
 }
 
 func (l *listCommand) ListTransfer() {
-	url := fmt.Sprintf("%s:%d/transfer", "http://localhost", 12351)
+	url := fmt.Sprintf("%s:%d/transfer", utils.RetRealHTTP(config.Cfg.Server.IP), config.Cfg.Server.APIPort)
 
 	resp := api.Message{}
 	err := grequests.Get(context.TODO(), url, nil, &resp)
@@ -158,7 +159,7 @@ func (l *listCommand) ListTransfer() {
 }
 
 func (l *listCommand) ListClient() {
-	url := fmt.Sprintf("%s:%d/client", "http://localhost", 12351)
+	url := fmt.Sprintf("%s:%d/client", utils.RetRealHTTP(config.Cfg.Server.IP), config.Cfg.Server.APIPort)
 
 	resp := api.Message{}
 	err := grequests.Get(context.TODO(), url, nil, &resp)

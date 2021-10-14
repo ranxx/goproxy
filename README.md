@@ -1,5 +1,13 @@
 # goproxy
 
+## 启动
+
+### Linux
+
+如果安装了docker，server可直接敲 `make` 命令启动，否则请移步`教程`
+
+## 教程
+
 本项目使用 golang 编写的内网穿透工具，分为 server 和 client，
 
 启动server `go run cmd/main.go server`

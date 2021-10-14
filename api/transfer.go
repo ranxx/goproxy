@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ranxx/goproxy/config"
 	"github.com/ranxx/goproxy/proto"
 	transfer "github.com/ranxx/goproxy/transfer/service"
 )
@@ -80,6 +81,9 @@ func (t *Transfer) NewTCP(ctx *gin.Context) {
 	}
 
 	for _, laddr := range req.Laddr {
+		if laddr.Ip == "" {
+			laddr.Ip = config.Cfg.Server.IP
+		}
 		err := transfer.NewTransferWithIPPort(req.Machine, laddr.Ip, int(laddr.Port), req.Raddr.Ip, int(req.Raddr.Port), proto.NetworkType_TCP).Start()
 		if err != nil {
 			ctx.JSON(http.StatusOK, Message{

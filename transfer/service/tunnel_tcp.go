@@ -51,7 +51,7 @@ func newTunnelTCP(logPrefix, machine string, network proto.NetworkType, msgID in
 }
 
 // Receive ...
-func (t *TunnelTCP) Receive(body *[]byte) {
+func (t *TunnelTCP) Receive(body *proto.Msg) {
 	// TODO: 处理报错的问题
 
 	// tcpBody := new(proto.Bind)
@@ -60,6 +60,16 @@ func (t *TunnelTCP) Receive(body *[]byte) {
 	// 	panic(err)
 	// }
 	// fmt.Println("收到消息----", tcpBody)
+	if body.Type == proto.MsgType_Error {
+		ep := new(proto.ErrorBody)
+		ep.XXX_Unmarshal(body.Body)
+
+		// t.indexs[ep.MsgId].Write([]byte(ep.Err))
+		log.Println(t.logPrefix, t.indexs[ep.MsgId].RemoteAddr(), "收到client报错", ep.Err)
+		// 断开
+		t.indexs[ep.MsgId].Close()
+	}
+
 	return
 }
 

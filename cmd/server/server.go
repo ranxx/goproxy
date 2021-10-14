@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ranxx/goproxy/api"
+	"github.com/ranxx/goproxy/config"
 	"github.com/ranxx/goproxy/service"
 	transfer "github.com/ranxx/goproxy/transfer/service"
 	"github.com/ranxx/goproxy/utils"
@@ -23,11 +24,23 @@ func Command() *cobra.Command {
 		Short: "server. Network Address Translation，NAT",
 		Long: `内网穿透服务端，在公网服务机器上启动
 eg:
+
+注意：默认ip和port为配置文件的server.ip，server.port配置
+
 1) goproxy server
-2) goproxy server --port 12341
-3) goproxy server --api-port 12351
-4) goproxy server --port 12341 --api-port 12351`,
+2) goproxy server -p 12341
+3) goproxy server -a 12351
+4) goproxy server -p 12341 -a 12351`,
 		Run: func(cmd *cobra.Command, args []string) {
+			// 如果命令行没有设置，则使用config中的配置
+			if !cmd.Flag("port").Changed {
+				*port = config.Cfg.Server.Port
+			}
+
+			if !cmd.Flag("api-port").Changed {
+				*apiPort = config.Cfg.Server.APIPort
+			}
+
 			srv := service.NewService("", *port)
 			go srv.Start()
 

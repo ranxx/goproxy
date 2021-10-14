@@ -32,3 +32,17 @@ func ParseAddrString(addr string) (ip string, port int, err error) {
 	ip = addr[:index]
 	return
 }
+
+// RetRealHTTP 返回带有http或者https
+func RetRealHTTP(ip string) string {
+	if strings.HasPrefix(ip, "https://") {
+		return ip
+	}
+	if strings.HasPrefix(ip, "http://") {
+		return ip
+	}
+	if len(ip) <= 0 {
+		return "http://localhost"
+	}
+	return fmt.Sprintf("http://%s", ip)
+}
